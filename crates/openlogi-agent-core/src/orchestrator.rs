@@ -314,7 +314,7 @@ impl Orchestrator {
                 gestures.remove(button);
             }
             if let Some(model) = spy_model_for_device(&self.config, key) {
-                for button in model.armed_buttons(&bindings) {
+                for button in model.armed_buttons(&bindings, &self.config.dpi_presets(key)) {
                     if button.is_os_hook_button() {
                         // Spy suppresses the firmware HID report; a leftover
                         // hook binding would double-dispatch if one leaked.

@@ -174,7 +174,12 @@ impl AppState {
             Some(record.config_key.as_str()),
             self.editing_app(),
         );
-        !model.armed_buttons(&bindings).is_empty()
+        !model
+            .armed_buttons(
+                &bindings,
+                &self.config.dpi_presets(record.config_key.as_str()),
+            )
+            .is_empty()
     }
 
     /// Device-global gesture direction maps for the selected device.

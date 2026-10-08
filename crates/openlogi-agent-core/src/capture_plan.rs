@@ -120,7 +120,7 @@ pub fn plan_for_device(
     let gesture_bindings = hidpp_gesture_maps_for(config, Some(config_key));
     let spy_model = spy_model_for_device(config, config_key);
     let spy_buttons = spy_model
-        .map(|model| model.armed_buttons(&bindings))
+        .map(|model| model.armed_buttons(&bindings, &config.dpi_presets(config_key)))
         .unwrap_or_default();
     let spy_model_key = spy_model
         .filter(|_| !spy_buttons.is_empty())

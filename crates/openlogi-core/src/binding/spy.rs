@@ -34,6 +34,7 @@ use std::collections::BTreeMap;
 use super::button::{ButtonId, G502_LIGHTSPEED_CONFIG_KEY, G502_X_PLUS_CONFIG_KEY};
 use super::defaults::default_binding;
 use super::value::Binding;
+use crate::hid::Dpi;
 
 /// One firmware model that may enter Host mode and remap `0x8110` buttons.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -74,18 +75,24 @@ impl SpyModel {
     /// Buttons to arm for a Host-mode spy session.
     ///
     /// One customized extra takes over the whole extra cluster (Host mode
-    /// pauses onboard profiles for all of them). Remapped
-    /// [`Self::spy_owned_os_buttons`] join that set one-by-one so unbound G4/G5
-    /// stay firmware-native.
+    /// pauses onboard profiles for all of them). So do two or more DPI
+    /// presets: the user asked OpenLogi for DPI stages, and only Host mode
+    /// lets unbound DPI up/down step through them instead of the onboard
+    /// profile's levels. Remapped [`Self::spy_owned_os_buttons`] join that set
+    /// one-by-one so unbound G4/G5 stay firmware-native.
     #[must_use]
-    pub fn armed_buttons(&self, bindings: &BTreeMap<ButtonId, Binding>) -> Vec<ButtonId> {
+    pub fn armed_buttons(
+        &self,
+        bindings: &BTreeMap<ButtonId, Binding>,
+        dpi_presets: &[Dpi],
+    ) -> Vec<ButtonId> {
         let extras_customized = self.extra_buttons.iter().any(|button| {
             bindings
                 .get(button)
                 .is_some_and(Binding::has_configured_action)
         });
         let mut armed = Vec::new();
-        if extras_customized {
+        if extras_customized || steps_dpi_presets(dpi_presets) {
             armed.extend_from_slice(self.extra_buttons);
         }
         for button in self.spy_owned_os_buttons {
@@ -98,6 +105,13 @@ impl SpyModel {
         }
         armed
     }
+}
+
+/// Two distinct presets make a stage list worth stepping through.
+fn steps_dpi_presets(presets: &[Dpi]) -> bool {
+    presets
+        .first()
+        .is_some_and(|first| presets.iter().any(|p| p != first))
 }
 
 fn os_button_needs_spy(button: ButtonId, binding: &Binding) -> bool {
@@ -132,8 +146,29 @@ mod tests {
         let model = SpyModel::for_hidpp_key(G502_X_PLUS_CONFIG_KEY).expect("G502 row");
         let bindings = BTreeMap::from([(ButtonId::DpiUp, Binding::Single(Action::Copy))]);
         assert_eq!(
-            model.armed_buttons(&bindings),
+            model.armed_buttons(&bindings, &[]),
             ButtonId::SPY_BUTTONS.to_vec()
+        );
+    }
+
+    #[test]
+    fn dpi_presets_arm_the_cluster_without_any_binding() {
+        let model = SpyModel::for_hidpp_key(G502_LIGHTSPEED_CONFIG_KEY).expect("G502 row");
+        let none = BTreeMap::new();
+        let stages = [Dpi::new(1000), Dpi::new(2000), Dpi::new(4000)];
+        assert_eq!(
+            model.armed_buttons(&none, &stages),
+            ButtonId::SPY_BUTTONS.to_vec()
+        );
+        assert_eq!(model.armed_buttons(&none, &[]), []);
+        assert_eq!(
+            model.armed_buttons(&none, &[Dpi::new(1600)]),
+            [],
+            "a single preset is not a stage list"
+        );
+        assert_eq!(
+            model.armed_buttons(&none, &[Dpi::new(1600), Dpi::new(1600)]),
+            []
         );
     }
 
@@ -141,7 +176,7 @@ mod tests {
     fn remapped_side_buttons_join_the_armed_set() {
         let model = SpyModel::for_hidpp_key(G502_X_PLUS_CONFIG_KEY).expect("G502 row");
         let bindings = BTreeMap::from([(ButtonId::Back, Binding::Single(Action::PreviousDesktop))]);
-        assert_eq!(model.armed_buttons(&bindings), vec![ButtonId::Back]);
+        assert_eq!(model.armed_buttons(&bindings, &[]), vec![ButtonId::Back]);
     }
 
     #[test]
@@ -155,7 +190,7 @@ mod tests {
             )),
         )]);
         assert_eq!(
-            model.armed_buttons(&bindings),
+            model.armed_buttons(&bindings, &[]),
             ButtonId::SPY_BUTTONS.to_vec(),
             "a long-only G6 binding must take Host mode for the whole extra cluster"
         );
@@ -170,6 +205,6 @@ mod tests {
         ]);
         let mut expected = ButtonId::SPY_BUTTONS.to_vec();
         expected.push(ButtonId::Forward);
-        assert_eq!(model.armed_buttons(&bindings), expected);
+        assert_eq!(model.armed_buttons(&bindings, &[]), expected);
     }
 }
