@@ -456,7 +456,8 @@ pub enum SpyNativeDpi {
         /// `true` is G8 / DPI up.
         up: bool,
     },
-    /// G6 hold: write the sensor's minimum DPI.
+    /// G6 hold: drop to the lowest configured DPI preset; without presets,
+    /// the sensor's minimum DPI.
     ShiftDown,
     /// G6 release: restore the DPI captured on press.
     ShiftUp,
@@ -531,7 +532,11 @@ fn spy_native_target(
         ),
         SpyNativeDpi::ShiftDown => {
             *shift_restore = Some(info.current);
-            Some(info.capabilities.min())
+            Some(
+                presets
+                    .and_then(|state| state.shift_target(info.current))
+                    .unwrap_or_else(|| info.capabilities.min()),
+            )
         }
         SpyNativeDpi::ShiftUp => shift_restore.take(),
     }

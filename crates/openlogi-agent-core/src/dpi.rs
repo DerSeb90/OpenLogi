@@ -94,6 +94,15 @@ impl DpiCycleState {
         Some(next.unwrap_or(current))
     }
 
+    /// The DPI a held DPI-shift ("sniper") button drops to: the lowest preset,
+    /// or `current` when that is already the lowest stage. `None` without
+    /// presets.
+    #[must_use]
+    pub fn shift_target(&self, current: Dpi) -> Option<Dpi> {
+        let lowest = self.presets.iter().map(|&p| self.normalize(p)).min()?;
+        Some(lowest.min(current))
+    }
+
     fn normalize(&self, dpi: Dpi) -> Dpi {
         self.capabilities
             .as_ref()
@@ -141,6 +150,18 @@ mod tests {
             DpiCycleState::default().preset_step(Dpi::new(800), true),
             None
         );
+    }
+
+    #[test]
+    fn shift_target_drops_to_the_lowest_preset_but_never_raises() {
+        let state = DpiCycleState {
+            presets: vec![Dpi::new(2000), Dpi::new(1000), Dpi::new(4000)],
+            ..DpiCycleState::default()
+        };
+        assert_eq!(state.shift_target(Dpi::new(4000)), Some(Dpi::new(1000)));
+        assert_eq!(state.shift_target(Dpi::new(1000)), Some(Dpi::new(1000)));
+        assert_eq!(state.shift_target(Dpi::new(400)), Some(Dpi::new(400)));
+        assert_eq!(DpiCycleState::default().shift_target(Dpi::new(800)), None);
     }
 
     #[test]

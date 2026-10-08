@@ -390,16 +390,16 @@ impl ActionDispatcher {
         let registry = self.executor.registry.clone();
         let receiver_access = self.executor.receiver_access.clone();
         let device_io = self.executor.device_io.clone();
-        // Snapshot this device's presets now so a DPI up/down press steps
-        // between them, not by one sensor stage.
+        // Snapshot this device's presets now so DPI up/down steps between
+        // them and DPI shift drops to the lowest one.
         let presets = match kind {
-            SpyNativeDpi::Step { .. } => self
+            SpyNativeDpi::Step { .. } | SpyNativeDpi::ShiftDown => self
                 .executor
                 .dpi_cycle
                 .read()
                 .ok()
                 .and_then(|cycles| cycles.by_key.get(session.device_key()).cloned()),
-            SpyNativeDpi::ShiftDown | SpyNativeDpi::ShiftUp => None,
+            SpyNativeDpi::ShiftUp => None,
         };
         tokio::spawn(async move {
             let mut held = shift.lock().await;
