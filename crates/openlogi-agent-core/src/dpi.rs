@@ -74,6 +74,26 @@ impl DpiCycleState {
         Some((self.normalize(self.presets[clamped]), self.target.clone()))
     }
 
+    /// The preset one step above (`up`) or below `current`, for a DPI up/down
+    /// button. Measured from the sensor's live DPI rather than [`Self::index`],
+    /// so a G6 shift or a panel write in between cannot skip a stage. Stays on
+    /// `current` past either end instead of wrapping. `None` without presets.
+    #[must_use]
+    pub fn preset_step(&self, current: Dpi, up: bool) -> Option<Dpi> {
+        let mut presets: Vec<Dpi> = self.presets.iter().map(|&p| self.normalize(p)).collect();
+        if presets.is_empty() {
+            return None;
+        }
+        presets.sort_unstable();
+        presets.dedup();
+        let next = if up {
+            presets.into_iter().find(|&p| p > current)
+        } else {
+            presets.into_iter().rev().find(|&p| p < current)
+        };
+        Some(next.unwrap_or(current))
+    }
+
     fn normalize(&self, dpi: Dpi) -> Dpi {
         self.capabilities
             .as_ref()
@@ -100,6 +120,27 @@ mod tests {
             },
         );
         cycles
+    }
+
+    #[test]
+    fn preset_step_walks_sorted_presets_and_stops_at_the_ends() {
+        let state = DpiCycleState {
+            presets: vec![Dpi::new(3200), Dpi::new(800), Dpi::new(1600)],
+            ..DpiCycleState::default()
+        };
+        let step = |dpi, up| state.preset_step(Dpi::new(dpi), up);
+        assert_eq!(step(800, true), Some(Dpi::new(1600)));
+        assert_eq!(step(1600, true), Some(Dpi::new(3200)));
+        assert_eq!(step(3200, true), Some(Dpi::new(3200)));
+        assert_eq!(step(1600, false), Some(Dpi::new(800)));
+        assert_eq!(step(800, false), Some(Dpi::new(800)));
+        // Off-preset (e.g. after a panel write): move to the neighbour.
+        assert_eq!(step(1000, true), Some(Dpi::new(1600)));
+        assert_eq!(step(1000, false), Some(Dpi::new(800)));
+        assert_eq!(
+            DpiCycleState::default().preset_step(Dpi::new(800), true),
+            None
+        );
     }
 
     #[test]

@@ -29,6 +29,7 @@ use openlogi_hid::{
 use tokio::time::error::Elapsed;
 use tracing::{debug, warn};
 
+use crate::DpiCycleState;
 use crate::receiver_access::ReceiverAccess;
 
 mod context;
@@ -449,7 +450,8 @@ fn log_wheel_result(
 /// Native G6–G8 fallback while Host mode has suppressed firmware DPI.
 #[derive(Clone, Copy, Debug)]
 pub enum SpyNativeDpi {
-    /// Step one stage (or 50 DPI on a continuous list).
+    /// Step to the next configured DPI preset; without presets, one sensor
+    /// stage (or 50 DPI on a continuous list).
     Step {
         /// `true` is G8 / DPI up.
         up: bool,
@@ -472,6 +474,10 @@ pub struct SpyShiftHold {
 }
 
 /// Read-modify-write the current sensor DPI for an unbound G6–G8 press.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the four executor handles plus the press, its presets and the G6 restore slot"
+)]
 pub async fn apply_spy_native_dpi(
     capture: &CaptureChannel,
     registry: &ChannelRegistry,
@@ -479,6 +485,7 @@ pub async fn apply_spy_native_dpi(
     device_io: &DeviceIoGate,
     route: &DeviceRoute,
     kind: SpyNativeDpi,
+    presets: Option<&DpiCycleState>,
     shift_restore: &mut Option<Dpi>,
 ) -> Result<(), WriteError> {
     if let SpyNativeDpi::ShiftUp = kind {
@@ -497,7 +504,7 @@ pub async fn apply_spy_native_dpi(
             get_dpi_info_on(&shared).await
         })
         .await?;
-    let Some(dpi) = spy_native_target(&info, kind, shift_restore) else {
+    let Some(dpi) = spy_native_target(&info, kind, presets, shift_restore) else {
         return Ok(());
     };
     if dpi == info.current {
@@ -513,10 +520,15 @@ pub async fn apply_spy_native_dpi(
 fn spy_native_target(
     info: &DpiInfo,
     kind: SpyNativeDpi,
+    presets: Option<&DpiCycleState>,
     shift_restore: &mut Option<Dpi>,
 ) -> Option<Dpi> {
     match kind {
-        SpyNativeDpi::Step { up } => Some(info.capabilities.step(info.current, up)),
+        SpyNativeDpi::Step { up } => Some(
+            presets
+                .and_then(|state| state.preset_step(info.current, up))
+                .unwrap_or_else(|| info.capabilities.step(info.current, up)),
+        ),
         SpyNativeDpi::ShiftDown => {
             *shift_restore = Some(info.current);
             Some(info.capabilities.min())
