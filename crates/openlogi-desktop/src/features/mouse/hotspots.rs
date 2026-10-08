@@ -151,8 +151,11 @@ pub fn spy_overlay_for(config_key: &str) -> Option<SpyOverlay> {
 
 /// Synthetic G6–G9 targets for the G502 X Plus silhouette. Coordinates reuse
 /// the MX left-thumb and DPI-cluster slots so the extras are visible; this
-/// mouse has no depot `slotId`s. Other models add their own overlay in
-/// [`spy_overlay_for`] — do not reuse these numbers.
+/// mouse has no depot `slotId`s. The G502 LIGHTSPEED falls back to the same
+/// overlay so its extras stay bindable, but the points do not line up with
+/// its real side render: its depot carries slot-id-only markers
+/// (`g502wireless_g4_m1`…) split across the front and side images, which
+/// [`spy_overlay_for`] does not map yet.
 #[must_use]
 pub fn spy_hotspots() -> [Hotspot; 4] {
     [
@@ -273,6 +276,7 @@ mod tests {
     #[test]
     fn merge_spy_hotspots_is_gated_on_the_g502() {
         assert!(spy_overlay_for("04099").is_some());
+        assert!(spy_overlay_for("0407f").is_some());
         assert!(spy_overlay_for("2b042").is_none());
         assert!(
             spy_overlay_for("0409f").is_none(),

@@ -1,9 +1,9 @@
 //! `0x8110` spy capture: Host-mode mapping suppress and mask-diff.
 //!
 //! Bit tables are keyed by the same HID++ model id as
-//! `openlogi_core::binding::SPY_MODELS`. The G502 X Plus row (`04099`) is
-//! locked from a live `diag mouse-buttons --watch`. Do not copy it onto a
-//! cousin. Function semantics are reverse-engineered from public cvuchener
+//! `openlogi_core::binding::SPY_MODELS`. The G502 X Plus (`04099`) and
+//! G502 LIGHTSPEED (`0407f`) rows are each locked from their own live
+//! `diag mouse-buttons --watch`. Do not copy a row onto a cousin. Function semantics are reverse-engineered from public cvuchener
 //! `IMouseButtonSpy` / `IOnboardProfiles` descriptions; this file does not
 //! copy GPL code.
 //!
@@ -24,7 +24,7 @@ use hidpp::{
     },
     protocol::v20,
 };
-use openlogi_core::binding::{ButtonId, G502_X_PLUS_CONFIG_KEY};
+use openlogi_core::binding::{ButtonId, G502_LIGHTSPEED_CONFIG_KEY, G502_X_PLUS_CONFIG_KEY};
 use tracing::{debug, warn};
 
 use super::{CaptureSpec, GestureError};
@@ -43,10 +43,26 @@ const G502_X_PLUS_SPY_BITS: [(u8, ButtonId); 6] = [
     (8, ButtonId::ProfileCycle),
 ];
 
+/// Locked `0x8110` bit → [`ButtonId`] map for the 2019 G502 LIGHTSPEED
+/// (`0407f`), from a live `diag mouse-buttons --watch` over a POWERPLAY
+/// receiver. It differs from the X Plus: G5/G6 swap bits 4 and 5, DPI
+/// down/up sit on bits 6/7, and bits 9/10 are the wheel tilts, which stay
+/// firmware-native.
+const G502_LIGHTSPEED_SPY_BITS: [(u8, ButtonId); 6] = [
+    (3, ButtonId::Back),
+    (4, ButtonId::Forward),
+    (5, ButtonId::DpiShift),
+    (6, ButtonId::DpiDown),
+    (7, ButtonId::DpiUp),
+    (8, ButtonId::ProfileCycle),
+];
+
 /// Same HID++ keys as `openlogi_core::binding::SPY_MODELS`. Bits are
 /// per-model; two cousins can share [`ButtonId`]s with different masks.
-const SPY_BIT_TABLES: &[(&str, &[(u8, ButtonId)])] =
-    &[(G502_X_PLUS_CONFIG_KEY, &G502_X_PLUS_SPY_BITS)];
+const SPY_BIT_TABLES: &[(&str, &[(u8, ButtonId)])] = &[
+    (G502_X_PLUS_CONFIG_KEY, &G502_X_PLUS_SPY_BITS),
+    (G502_LIGHTSPEED_CONFIG_KEY, &G502_LIGHTSPEED_SPY_BITS),
+];
 
 fn spy_bits_for_model(key: &str) -> &'static [(u8, ButtonId)] {
     SPY_BIT_TABLES
@@ -421,5 +437,38 @@ mod tests {
         let with_back = suppress_spy_slots(&mapping, &[ButtonId::Back], &G502_X_PLUS_SPY_BITS);
         assert_eq!(with_back[3], 0);
         assert_eq!(with_back[5], 6);
+    }
+
+    #[test]
+    fn g502_lightspeed_resolves_its_own_bit_table() {
+        assert_eq!(
+            spy_bits_for_model(G502_LIGHTSPEED_CONFIG_KEY),
+            G502_LIGHTSPEED_SPY_BITS.as_slice()
+        );
+        // Recorded masks: G6 = 0x0020, G5 = 0x0010, G8 = 0x0080.
+        let buttons = ButtonId::SPY_BUTTONS;
+        let bits = &G502_LIGHTSPEED_SPY_BITS;
+        assert_eq!(
+            spy_edges(0, 0x0020, &buttons, bits),
+            [(ButtonId::DpiShift, true)]
+        );
+        assert_eq!(
+            spy_edges(0, 0x0080, &buttons, bits),
+            [(ButtonId::DpiUp, true)]
+        );
+        assert_eq!(spy_edges(0, 0x0010, &buttons, bits), []);
+        assert_eq!(
+            spy_edges(0, 0x0200 | 0x0400, &buttons, bits),
+            [],
+            "wheel tilts are not spy buttons"
+        );
+    }
+
+    #[test]
+    fn g502_lightspeed_suppresses_g6_through_g9_only() {
+        let mapping: Vec<u8> = (1..=11).collect();
+        let extras =
+            suppress_spy_slots(&mapping, &ButtonId::SPY_BUTTONS, &G502_LIGHTSPEED_SPY_BITS);
+        assert_eq!(extras, [1, 2, 3, 4, 5, 0, 0, 0, 0, 10, 11]);
     }
 }

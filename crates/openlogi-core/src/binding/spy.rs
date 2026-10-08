@@ -31,7 +31,7 @@
 
 use std::collections::BTreeMap;
 
-use super::button::{ButtonId, G502_X_PLUS_CONFIG_KEY};
+use super::button::{ButtonId, G502_LIGHTSPEED_CONFIG_KEY, G502_X_PLUS_CONFIG_KEY};
 use super::defaults::default_binding;
 use super::value::Binding;
 
@@ -48,13 +48,21 @@ pub struct SpyModel {
 }
 
 /// Locked spy models. Only rows backed by a live watch dump belong here.
-pub const SPY_MODELS: &[SpyModel] = &[SpyModel {
-    config_key: G502_X_PLUS_CONFIG_KEY,
-    extra_buttons: &ButtonId::SPY_BUTTONS,
-    // No `0x1b04` on this mouse: remapped G4/G5 must be suppressed in the
-    // `0x8110` mapping or the OS keeps seeing hardware Back/Forward.
-    spy_owned_os_buttons: &[ButtonId::Back, ButtonId::Forward],
-}];
+pub const SPY_MODELS: &[SpyModel] = &[
+    SpyModel {
+        config_key: G502_X_PLUS_CONFIG_KEY,
+        extra_buttons: &ButtonId::SPY_BUTTONS,
+        // No `0x1b04` on this mouse: remapped G4/G5 must be suppressed in the
+        // `0x8110` mapping or the OS keeps seeing hardware Back/Forward.
+        spy_owned_os_buttons: &[ButtonId::Back, ButtonId::Forward],
+    },
+    SpyModel {
+        config_key: G502_LIGHTSPEED_CONFIG_KEY,
+        extra_buttons: &ButtonId::SPY_BUTTONS,
+        // No `0x1b04` here either.
+        spy_owned_os_buttons: &[ButtonId::Back, ButtonId::Forward],
+    },
+];
 
 impl SpyModel {
     /// The locked row for this HID++ model id, if any.
@@ -105,13 +113,15 @@ mod tests {
     use crate::binding::Action;
 
     #[test]
-    fn only_the_g502_x_plus_is_a_spy_model() {
-        let model = SpyModel::for_hidpp_key(G502_X_PLUS_CONFIG_KEY).expect("G502 row");
-        assert_eq!(model.extra_buttons, ButtonId::SPY_BUTTONS.as_slice());
-        assert_eq!(
-            model.spy_owned_os_buttons,
-            [ButtonId::Back, ButtonId::Forward].as_slice()
-        );
+    fn only_dumped_g502_models_are_spy_models() {
+        for key in [G502_X_PLUS_CONFIG_KEY, G502_LIGHTSPEED_CONFIG_KEY] {
+            let model = SpyModel::for_hidpp_key(key).expect("G502 row");
+            assert_eq!(model.extra_buttons, ButtonId::SPY_BUTTONS.as_slice());
+            assert_eq!(
+                model.spy_owned_os_buttons,
+                [ButtonId::Back, ButtonId::Forward].as_slice()
+            );
+        }
         assert_eq!(SpyModel::for_hidpp_key("2b042"), None);
         assert_eq!(SpyModel::for_hidpp_key("0409f"), None);
         assert_eq!(SpyModel::for_hidpp_key("unit:75c69495"), None);

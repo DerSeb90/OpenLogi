@@ -94,6 +94,10 @@ pub enum ButtonId {
 /// `format!("{:x}{:04x}", extended_model_id, model_ids[0])` with ext = 0.
 pub const G502_X_PLUS_CONFIG_KEY: &str = "04099";
 
+/// Lightspeed / wired G502 LIGHTSPEED, the 2019 model (`wpid=407f`). Same
+/// `config_key` scheme as [`G502_X_PLUS_CONFIG_KEY`].
+pub const G502_LIGHTSPEED_CONFIG_KEY: &str = "0407f";
+
 impl ButtonId {
     /// Every rebindable button in declaration (physical front-to-side) order —
     /// the iteration source for default-binding seeding and the popover
